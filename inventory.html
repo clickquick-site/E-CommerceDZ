@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <title>إدارة السلع</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body style="margin:0;background:var(--bg);height:100vh;overflow:hidden;display:flex;flex-direction:column">
+
+<div class="page-body" style="flex:1;overflow-y:auto;padding:16px 20px" id="inv-root">
+
+  <!-- Notifications -->
+  <div class="notif-box" id="inv-notif">
+    <span style="color:var(--text-muted)">جاري التحميل...</span>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchInvTab('all',this)">📋 كل المنتجات</button>
+    <button class="tab-btn" onclick="switchInvTab('add',this)">➕ إضافة منتج</button>
+  </div>
+
+  <!-- All Products Tab -->
+  <div id="inv-tab-all">
+    <div class="search-box">
+      <span class="search-icon">🔍</span>
+      <input type="text" placeholder="ابحث عن منتج..." oninput="searchProducts(this.value)" id="product-search">
+    </div>
+    <div class="data-table-wrap">
+      <table class="data-table" id="products-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>اسم المنتج</th>
+            <th>النوع</th>
+            <th>سعر الشراء</th>
+            <th>سعر البيع</th>
+            <th>الكمية</th>
+            <th>الحالة</th>
+            <th>إجراءات</th>
+          </tr>
+        </thead>
+        <tbody id="products-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Add Product Tab -->
+  <div id="inv-tab-add" style="display:none">
+    <div class="notif-box" id="add-prod-notif" style="margin-bottom:14px"></div>
+    <div style="background:var(--bg-card);border-radius:var(--radius);padding:20px;border:1px solid var(--border)">
+      <div class="form-row">
+        <div class="form-group">
+          <label>اسم المنتج *</label>
+          <input type="text" id="prod-name" placeholder="مثال: حذاء رياضي">
+        </div>
+        <div class="form-group">
+          <label>نوع المنتج</label>
+          <input type="text" id="prod-type" placeholder="مثال: أحذية">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>الوحدة (اختياري)</label>
+          <select id="prod-unit">
+            <option value="">-- اختر --</option>
+            <option>قطعة</option><option>كيلو</option><option>لتر</option>
+            <option>علبة</option><option>دستة</option><option>حبة</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>سعر الشراء *</label>
+          <input type="number" id="prod-buy" placeholder="0" min="0">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>سعر البيع *</label>
+          <input type="number" id="prod-sell" placeholder="0" min="0">
+        </div>
+        <div class="form-group">
+          <label>الكمية *</label>
+          <input type="number" id="prod-qty" placeholder="0" min="0">
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:8px">
+        <button class="btn btn-outline" onclick="clearProductForm()">🗑 تفريغ الحقول</button>
+        <button class="btn btn-primary" onclick="saveProduct()">💾 حفظ المنتج</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ===== ACCESS PARENT STATE =====
+const DB = window.parent.DB;
+const getState = () => window.parent.State;
+
+function showToast(msg, type = 'info', dur = 3000) {
+  window.parent.showToast(msg, type, dur);
+}
+
+// ===== INIT =====
+window.addEventListener('load', () => {
+  renderStockNotifications();
+  renderProductsTable();
+});
+
+// ===== NOTIFICATIONS =====
+function renderStockNotifications() {
+  const State = getState();
+  if (!State) return;
+  const low = State.products.filter(p => p.qty > 0 && p.qty <= 5);
+  const zero = State.products.filter(p => p.qty <= 0);
+  const box = document.getElementById('inv-notif');
+  if (!low.length && !zero.length) {
+    box.innerHTML = '<span style="color:var(--text-muted)">✅ لا توجد إشعارات مخزون</span>';
+    return;
+  }
+  box.innerHTML = [
+    ...zero.map(p => `<div class="notif-item danger">❌ نفاد مخزون: <strong>${p.name}</strong></div>`),
+    ...low.map(p => `<div class="notif-item warning">⚠️ مخزون منخفض: <strong>${p.name}</strong> (بقي ${p.qty})</div>`)
+  ].join('');
+}
+
+// ===== TABS =====
+function switchInvTab(tab, btn) {
+  document.querySelectorAll('.tabs .tab-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('inv-tab-all').style.display = tab === 'all' ? 'block' : 'none';
+  document.getElementById('inv-tab-add').style.display = tab === 'add' ? 'block' : 'none';
+}
+
+// ===== TABLE =====
+function renderProductsTable(filter = '') {
+  const State = getState();
+  if (!State) return;
+  const tbody = document.getElementById('products-tbody');
+  if (!tbody) return;
+  const list = filter
+    ? State.products.filter(p =>
+        p.name.toLowerCase().includes(filter.toLowerCase()) ||
+        (p.type || '').toLowerCase().includes(filter.toLowerCase()))
+    : State.products;
+
+  tbody.innerHTML = list.length ? list.map((p, i) => `
+    <tr>
+      <td>${i + 1}</td>
+      <td><strong>${p.name}</strong></td>
+      <td>${p.type || '-'}</td>
+      <td>${p.buyPrice} ${State.settings.currency}</td>
+      <td>${p.sellPrice} ${State.settings.currency}</td>
+      <td>${p.qty}</td>
+      <td>
+        <span class="badge ${p.qty <= 0 ? 'badge-danger' : p.qty <= 5 ? 'badge-warning' : 'badge-success'}">
+          ${p.qty <= 0 ? 'نفد' : p.qty <= 5 ? 'منخفض' : 'متوفر'}
+        </span>
+      </td>
+      <td>
+        <button class="btn btn-sm btn-primary" onclick="editProduct('${p.id}')">✏️ تعديل</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteProduct('${p.id}')">🗑</button>
+      </td>
+    </tr>
+  `).join('') : '<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--text-muted)">لا توجد منتجات</td></tr>';
+}
+
+function searchProducts(val) { renderProductsTable(val); }
+
+// ===== ADD PRODUCT =====
+function saveProduct() {
+  const State = getState();
+  if (!State) return;
+  const name = document.getElementById('prod-name').value.trim();
+  const type = document.getElementById('prod-type').value.trim();
+  const unit = document.getElementById('prod-unit').value;
+  const buyPrice = parseFloat(document.getElementById('prod-buy').value) || 0;
+  const sellPrice = parseFloat(document.getElementById('prod-sell').value) || 0;
+  const qty = parseInt(document.getElementById('prod-qty').value) || 0;
+  const notif = document.getElementById('add-prod-notif');
+
+  if (!name) {
+    if (notif) notif.innerHTML = '<div class="notif-item danger">❌ يرجى إدخال اسم المنتج</div>';
+    return;
+  }
+  if (State.products.find(p => p.name.toLowerCase() === name.toLowerCase())) {
+    if (notif) notif.innerHTML = `<div class="notif-item warning">⚠️ المنتج "${name}" موجود مسبقاً</div>`;
+    return;
+  }
+  if (sellPrice < buyPrice) {
+    if (notif) notif.innerHTML = `<div class="notif-item warning">⚠️ سعر البيع أقل من سعر الشراء!</div>`;
+  }
+
+  const product = {
+    id: Date.now().toString(), name, type, unit,
+    buyPrice, sellPrice, qty,
+    createdAt: new Date().toISOString()
+  };
+  State.products.push(product);
+  DB.set('products', State.products);
+
+  if (notif) notif.innerHTML = `<div class="notif-item info">✅ تم حفظ المنتج: <strong>${name}</strong></div>`;
+  clearProductForm();
+  renderProductsTable();
+  renderStockNotifications();
+  showToast(`✅ تم إضافة: ${name}`, 'success');
+}
+
+function clearProductForm() {
+  ['prod-name','prod-type','prod-buy','prod-sell','prod-qty'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  const u = document.getElementById('prod-unit'); if (u) u.value = '';
+  const notif = document.getElementById('add-prod-notif');
+  if (notif) notif.innerHTML = '';
+}
+
+// ===== EDIT / DELETE =====
+function editProduct(id) {
+  const State = getState();
+  const p = State.products.find(x => x.id === id);
+  if (!p) return;
+  const name = prompt('اسم المنتج:', p.name);
+  if (name === null) return;
+  const buyPrice = parseFloat(prompt('سعر الشراء:', p.buyPrice)) || p.buyPrice;
+  const sellPrice = parseFloat(prompt('سعر البيع:', p.sellPrice)) || p.sellPrice;
+  const qty = parseInt(prompt('الكمية:', p.qty));
+  if (isNaN(qty)) return;
+  p.name = name || p.name;
+  p.buyPrice = buyPrice;
+  p.sellPrice = sellPrice;
+  p.qty = qty;
+  DB.set('products', State.products);
+  renderProductsTable();
+  renderStockNotifications();
+  showToast('✅ تم تعديل المنتج', 'success');
+}
+
+function deleteProduct(id) {
+  if (!confirm('هل تريد حذف هذا المنتج؟')) return;
+  const State = getState();
+  State.products = State.products.filter(p => p.id !== id);
+  DB.set('products', State.products);
+  renderProductsTable();
+  renderStockNotifications();
+  showToast('🗑 تم حذف المنتج', 'info');
+}
+</script>
+</body>
+</html>
