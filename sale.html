@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <title>واجهة البيع</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body style="overflow:hidden;height:100vh;margin:0;background:var(--bg)">
+
+<div class="sale-layout" style="height:100vh;display:flex">
+
+  <!-- RIGHT: Products Panel -->
+  <div class="sale-products-panel" id="products-panel">
+    <div class="panel-watermark">E-Commerce DZ</div>
+    <div class="panel-header">
+      <h3>🛍️ المنتجات</h3>
+      <div class="panel-resize">
+        <span id="prod-size-val">100%</span>
+        <input type="range" min="0" max="100" value="100"
+          oninput="resizePanelSale('products-panel', this.value,'prod-size-val')">
+      </div>
+    </div>
+    <div style="padding:8px 12px">
+      <input type="text" id="product-search-sale" placeholder="🔍 ابحث عن منتج..."
+        oninput="filterProducts(this.value)"
+        style="width:100%;padding:9px 14px;border:1px solid var(--border);border-radius:8px;background:var(--bg-card);color:var(--text);font-family:inherit;font-size:0.88rem;outline:none">
+    </div>
+    <div class="products-grid" id="products-grid"></div>
+  </div>
+
+  <!-- LEFT: Cart Panel -->
+  <div class="sale-cart-panel" id="cart-panel">
+    <div class="panel-watermark">E-Commerce DZ</div>
+    <div class="panel-header">
+      <h3>🧾 سلة المشتريات</h3>
+      <div class="panel-resize">
+        <span id="cart-size-val">100%</span>
+        <input type="range" min="0" max="100" value="100"
+          oninput="resizePanelSale('cart-panel', this.value,'cart-size-val')">
+      </div>
+    </div>
+
+    <div class="cart-items" id="cart-items">
+      <div id="cart-empty" style="text-align:center;padding:40px;color:var(--text-muted)">
+        <div style="font-size:3rem;margin-bottom:8px">🛒</div>
+        <div>لم يتم إضافة أي منتج بعد</div>
+      </div>
+    </div>
+
+    <!-- Totals -->
+    <div class="cart-totals">
+      <div class="totals-row">
+        <div class="total-cell">
+          <div class="tc-label">الأصناف</div>
+          <div class="tc-value" id="total-items">0</div>
+        </div>
+        <div class="total-cell">
+          <div class="tc-label">العدد</div>
+          <div class="tc-value" id="total-qty">0</div>
+        </div>
+        <div class="total-cell">
+          <div class="tc-label">المجموع</div>
+          <div class="tc-value" id="total-price">0.00</div>
+        </div>
+      </div>
+
+      <!-- Debt fields -->
+      <div class="extra-fields" id="debt-fields" style="display:none">
+        <div class="extra-field">
+          <label>👤 اختيار الزبون (دين)</label>
+          <select id="debt-customer-select">
+            <option value="">-- اختر زبون --</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Delivery fields -->
+      <div class="extra-fields" id="delivery-fields" style="display:none">
+        <div class="extra-field">
+          <label>📦 اسم زبون التوصيل</label>
+          <input type="text" id="delivery-customer" placeholder="اسم الزبون">
+        </div>
+        <div class="extra-field">
+          <label>🚚 شركة التوصيل</label>
+          <select id="delivery-company">
+            <option value="">-- اختر الشركة --</option>
+            <option value="world_express">World Express</option>
+            <option value="yalidine">Yalidine</option>
+            <option value="dhd">DHD Livraison</option>
+            <option value="kazi">Kazi Tour</option>
+            <option value="zr">ZR Express</option>
+          </select>
+        </div>
+        <div class="extra-field">
+          <label>📞 هاتف المستلم</label>
+          <input type="tel" id="delivery-phone" placeholder="0xxxxxxxx">
+        </div>
+        <div class="extra-field">
+          <label>🏠 العنوان</label>
+          <input type="text" id="delivery-address" placeholder="الولاية / البلدية">
+        </div>
+      </div>
+    </div>
+
+    <!-- Action buttons -->
+    <div class="sale-actions">
+      <button class="sale-btn sale-btn-pay" onclick="doCheckout('pay')" data-tip="تسديد مباشر">
+        💵 تسديد
+      </button>
+      <button class="sale-btn sale-btn-deliver" onclick="toggleDelivery()" data-tip="طلب توصيل">
+        🚚 توصيل
+      </button>
+      <button class="sale-btn sale-btn-debt" onclick="toggleDebt()" data-tip="تسجيل دين">
+        📋 دين
+      </button>
+    </div>
+  </div>
+
+</div>
+
+<!-- DELIVERY MODAL -->
+<div class="modal-overlay" id="delivery-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>🚚 خيارات التوصيل</h3>
+      <button class="modal-close" onclick="closeSaleModal('delivery-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <p style="margin-bottom:14px;color:var(--text-muted)">اختر ما تريد فعله:</p>
+      <div style="display:flex;gap:10px">
+        <button class="btn btn-primary" style="flex:1" onclick="doCheckout('delivery-print')">🖨️ طباعة فاتورة التوصيل</button>
+        <button class="btn btn-success" style="flex:1" onclick="doCheckout('delivery-close')">✅ تأكيد وإغلاق</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- PRINT AREA -->
+<div id="print-area-sale" style="display:none"></div>
+
+<!-- TOAST -->
+<div class="toast-container" id="sale-toast-container"></div>
+
+<script>
+// ===== COMMUNICATION WITH PARENT =====
+const DB = window.parent.DB || {
+  get(key, def = null) {
+    try { const v = localStorage.getItem('ecdz_' + key); return v ? JSON.parse(v) : def; } catch { return def; }
+  },
+  set(key, val) {
+    try { localStorage.setItem('ecdz_' + key, JSON.stringify(val)); } catch {}
+  }
+};
+
+const getState = () => window.parent.State || window.State;
+
+// Toast local
+function saleToast(msg, type = 'info', dur = 3000) {
+  const c = document.getElementById('sale-toast-container');
+  const t = document.createElement('div');
+  t.className = `toast ${type}`;
+  t.textContent = msg;
+  c.appendChild(t);
+  setTimeout(() => t.remove(), dur);
+}
+
+// ===== RENDER PRODUCTS =====
+let allProducts = [];
+
+function loadAndRender() {
+  const State = getState();
+  if (!State) return;
+  allProducts = State.products || [];
+  renderProductGrid(allProducts);
+  renderCartLocal();
+}
+
+function filterProducts(val) {
+  const filtered = val
+    ? allProducts.filter(p => p.name.toLowerCase().includes(val.toLowerCase()))
+    : allProducts;
+  renderProductGrid(filtered);
+}
+
+function renderProductGrid(products) {
+  const State = getState();
+  const grid = document.getElementById('products-grid');
+  if (!grid || !State) return;
+  grid.innerHTML = '';
+  if (!products.length) {
+    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--text-muted)">📦 لا توجد منتجات. أضف منتجات من إدارة السلع</div>';
+    return;
+  }
+  products.forEach(p => {
+    const card = document.createElement('div');
+    card.className = `product-card ${p.qty <= 0 ? 'out-of-stock' : ''}`;
+    card.setAttribute('data-tip', p.name);
+    card.innerHTML = `
+      <div class="pname">${p.name}</div>
+      <div class="pprice">${p.sellPrice} ${State.settings.currency}</div>
+      <div class="pstock ${p.qty <= 0 ? 'zero' : p.qty <= 5 ? 'low' : ''}">
+        ${p.qty <= 0 ? '❌ نفد' : p.qty <= 5 ? `⚠️ ${p.qty} قطعة` : `✅ ${p.qty}`}
+      </div>
+    `;
+    if (p.qty > 0) card.onclick = () => addToCartLocal(p);
+    grid.appendChild(card);
+  });
+}
+
+// ===== CART =====
+function addToCartLocal(product) {
+  const State = getState();
+  if (!State) return;
+  const existing = State.cart.find(i => i.id === product.id);
+  if (existing) {
+    if (existing.qty >= product.qty) {
+      saleToast(`⚠️ الكمية المتوفرة: ${product.qty}`, 'error');
+      return;
+    }
+    existing.qty++;
+    existing.total = existing.qty * existing.price;
+  } else {
+    State.cart.push({
+      id: product.id, name: product.name,
+      price: product.sellPrice, qty: 1,
+      total: product.sellPrice, buyPrice: product.buyPrice
+    });
+  }
+  DB.set('cart_saved', State.cart);
+  renderCartLocal();
+  saleToast(`✅ تمت إضافة: ${product.name}`, 'success', 1500);
+}
+
+function renderCartLocal() {
+  const State = getState();
+  if (!State) return;
+  const container = document.getElementById('cart-items');
+  const emptyMsg = document.getElementById('cart-empty');
+  if (!container) return;
+
+  Array.from(container.children).forEach(c => { if (c.id !== 'cart-empty') c.remove(); });
+
+  if (State.cart.length === 0) {
+    if (emptyMsg) emptyMsg.style.display = 'block';
+    updateTotalsLocal();
+    return;
+  }
+  if (emptyMsg) emptyMsg.style.display = 'none';
+
+  State.cart.forEach((item, idx) => {
+    const row = document.createElement('div');
+    row.className = 'cart-item';
+    row.innerHTML = `
+      <span class="ci-name">${item.name}</span>
+      <div class="qty-control">
+        <button class="qty-btn" onclick="changeQtyLocal(${idx},-1)">−</button>
+        <input class="qty-input" type="number" value="${item.qty}" min="1"
+          onchange="setQtyLocal(${idx},this.value)">
+        <button class="qty-btn" onclick="changeQtyLocal(${idx},1)">+</button>
+      </div>
+      <input class="price-input" type="number" value="${item.price}"
+        onchange="setPriceLocal(${idx},this.value)" title="السعر">
+      <span class="item-total">${item.total.toFixed(2)} ${State.settings.currency}</span>
+      <button class="del-btn" onclick="removeFromCartLocal(${idx})" data-tip="حذف">🗑</button>
+    `;
+    container.appendChild(row);
+  });
+  updateTotalsLocal();
+}
+
+function changeQtyLocal(idx, delta) {
+  const State = getState();
+  const item = State.cart[idx];
+  const product = State.products.find(p => p.id === item.id);
+  const newQty = item.qty + delta;
+  if (newQty < 1) { removeFromCartLocal(idx); return; }
+  if (product && newQty > product.qty) {
+    saleToast(`⚠️ الحد الأقصى: ${product.qty}`, 'error');
+    return;
+  }
+  item.qty = newQty;
+  item.total = item.qty * item.price;
+  DB.set('cart_saved', State.cart);
+  renderCartLocal();
+}
+
+function setQtyLocal(idx, val) {
+  const State = getState();
+  const qty = parseInt(val) || 1;
+  State.cart[idx].qty = qty;
+  State.cart[idx].total = qty * State.cart[idx].price;
+  DB.set('cart_saved', State.cart);
+  renderCartLocal();
+}
+
+function setPriceLocal(idx, val) {
+  const State = getState();
+  const price = parseFloat(val) || 0;
+  State.cart[idx].price = price;
+  State.cart[idx].total = State.cart[idx].qty * price;
+  DB.set('cart_saved', State.cart);
+  renderCartLocal();
+}
+
+function removeFromCartLocal(idx) {
+  const State = getState();
+  State.cart.splice(idx, 1);
+  DB.set('cart_saved', State.cart);
+  renderCartLocal();
+}
+
+function updateTotalsLocal() {
+  const State = getState();
+  if (!State) return;
+  const items = State.cart.length;
+  const qty = State.cart.reduce((s,i) => s + i.qty, 0);
+  const total = State.cart.reduce((s,i) => s + i.total, 0);
+  const el = (id, v) => { const e = document.getElementById(id); if(e) e.textContent = v; };
+  el('total-items', items);
+  el('total-qty', qty);
+  el('total-price', total.toFixed(2) + ' ' + State.settings.currency);
+}
+
+// ===== DELIVERY & DEBT TOGGLE =====
+let deliveryMode = false;
+let debtMode = false;
+
+function toggleDelivery() {
+  deliveryMode = !deliveryMode;
+  debtMode = false;
+  document.getElementById('delivery-fields').style.display = deliveryMode ? 'flex' : 'none';
+  document.getElementById('debt-fields').style.display = 'none';
+}
+
+function toggleDebt() {
+  debtMode = !debtMode;
+  deliveryMode = false;
+  document.getElementById('debt-fields').style.display = debtMode ? 'flex' : 'none';
+  document.getElementById('delivery-fields').style.display = 'none';
+  if (debtMode) refreshDebtSelect();
+}
+
+function refreshDebtSelect() {
+  const State = getState();
+  if (!State) return;
+  const sel = document.getElementById('debt-customer-select');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">-- اختر زبون --</option>';
+  State.customers.forEach(c => {
+    const opt = document.createElement('option');
+    opt.value = c.id; opt.textContent = c.name;
+    sel.appendChild(opt);
+  });
+}
+
+// ===== CHECKOUT =====
+function doCheckout(type) {
+  const State = getState();
+  if (!State) return;
+  if (State.cart.length === 0) { saleToast('⚠️ السلة فارغة', 'error'); return; }
+
+  const total = State.cart.reduce((s,i) => s + i.total, 0);
+  const buyTotal = State.cart.reduce((s,i) => s + (i.buyPrice * i.qty), 0);
+  const profit = total - buyTotal;
+  const invoiceNum = String(State.invoiceCounter).padStart(3, '0');
+  const now = new Date();
+
+  if (type === 'deliver' || type === 'delivery-print' || type === 'delivery-close') {
+    if (type === 'deliver') {
+      document.getElementById('delivery-modal').classList.add('open');
+      return;
+    }
+    const delivery = {
+      id: Date.now(), invoiceNum: '#' + invoiceNum,
+      customerName: document.getElementById('delivery-customer').value,
+      phone: document.getElementById('delivery-phone').value,
+      address: document.getElementById('delivery-address').value,
+      company: document.getElementById('delivery-company').value,
+      items: [...State.cart], total, date: now.toISOString(), status: 'pending'
+    };
+    State.deliveries.push(delivery);
+    DB.set('deliveries', State.deliveries);
+    if (type === 'delivery-print') printDeliveryLocal(delivery);
+    document.getElementById('delivery-modal').classList.remove('open');
+    finalizeCheckoutLocal(invoiceNum, total, buyTotal, profit, now, 'delivery');
+
+  } else if (type === 'debt') {
+    const custId = document.getElementById('debt-customer-select').value;
+    if (!custId) { saleToast('⚠️ اختر زبوناً للدين', 'error'); return; }
+    const cust = State.customers.find(c => c.id == custId);
+    if (cust) {
+      cust.debt = (cust.debt || 0) + total;
+      cust.debtDate = now.toISOString();
+      DB.set('customers', State.customers);
+    }
+    finalizeCheckoutLocal(invoiceNum, total, buyTotal, profit, now, 'debt');
+  } else {
+    finalizeCheckoutLocal(invoiceNum, total, buyTotal, profit, now, 'cash');
+  }
+}
+
+function finalizeCheckoutLocal(invoiceNum, total, buyTotal, profit, date, type) {
+  const State = getState();
+  const sale = {
+    id: Date.now(), invoiceNum: '#' + invoiceNum,
+    items: [...State.cart], total, buyTotal, profit,
+    date: date.toISOString(), type,
+    user: State.currentUser?.name || 'admin'
+  };
+  State.sales.push(sale);
+  State.todaySales.push(sale);
+  DB.set('sales', State.sales);
+  DB.set('today_sales', State.todaySales);
+
+  State.cart.forEach(item => {
+    const p = State.products.find(x => x.id === item.id);
+    if (p) p.qty -= item.qty;
+  });
+  DB.set('products', State.products);
+
+  State.invoiceCounter++;
+  DB.set('invoice_counter', State.invoiceCounter);
+
+  State.cart = [];
+  DB.set('cart_saved', []);
+  deliveryMode = false;
+  debtMode = false;
+  document.getElementById('debt-fields').style.display = 'none';
+  document.getElementById('delivery-fields').style.display = 'none';
+
+  allProducts = State.products;
+  renderCartLocal();
+  renderProductGrid(allProducts);
+  saleToast(`✅ تمت العملية بنجاح | فاتورة #${invoiceNum}`, 'success');
+}
+
+function printDeliveryLocal(delivery) {
+  const State = getState();
+  const printArea = document.getElementById('print-area-sale');
+  printArea.innerHTML = `
+    <div style="font-family:Arial,sans-serif;padding:20px;max-width:400px;direction:rtl">
+      <h2 style="text-align:center;border-bottom:2px solid #333;padding-bottom:10px">${State.settings.storeName}</h2>
+      <h3 style="text-align:center">فاتورة توصيل - ${(delivery.company||'').replace('_',' ').toUpperCase()}</h3>
+      <p><strong>رقم الفاتورة:</strong> ${delivery.invoiceNum}</p>
+      <p><strong>التاريخ:</strong> ${new Date(delivery.date).toLocaleDateString('ar-DZ')}</p>
+      <p><strong>اسم المستلم:</strong> ${delivery.customerName}</p>
+      <p><strong>الهاتف:</strong> ${delivery.phone}</p>
+      <p><strong>العنوان:</strong> ${delivery.address}</p>
+      <hr>
+      <table style="width:100%;border-collapse:collapse">
+        <tr style="background:#f0f0f0"><th>المنتج</th><th>الكمية</th><th>السعر</th></tr>
+        ${delivery.items.map(i => `<tr><td>${i.name}</td><td>${i.qty}</td><td>${i.total} ${State.settings.currency}</td></tr>`).join('')}
+      </table>
+      <hr>
+      <p style="font-size:1.2rem;font-weight:bold;text-align:left">المجموع: ${delivery.total} ${State.settings.currency}</p>
+      <p style="text-align:center;margin-top:20px;font-size:0.9rem">${State.settings.welcomeMsg}</p>
+    </div>
+  `;
+  printArea.style.display = 'block';
+  window.print();
+  printArea.style.display = 'none';
+}
+
+function closeSaleModal(id) {
+  document.getElementById(id).classList.remove('open');
+}
+
+function resizePanelSale(panelId, val, labelId) {
+  const panel = document.getElementById(panelId);
+  const label = document.getElementById(labelId);
+  if (panel) panel.style.flex = val > 0 ? val / 100 : '0 0 0px';
+  if (label) label.textContent = val + '%';
+}
+
+// Init when called from parent
+window.initFromParent = function() {
+  loadAndRender();
+};
+
+// Auto-init if parent is ready
+window.addEventListener('load', () => {
+  setTimeout(loadAndRender, 100);
+});
+</script>
+</body>
+</html>
