@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <title>إدارة الزبائن</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body style="margin:0;background:var(--bg);height:100vh;overflow:hidden;display:flex;flex-direction:column">
+
+<div class="page-body" style="flex:1;overflow-y:auto;padding:16px 20px">
+
+  <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
+    <button class="btn btn-primary btn-sm" onclick="showAddCustomerModal()">➕ زبون جديد</button>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchCustTab('customers',this)">👤 الزبائن والديون</button>
+    <button class="tab-btn" onclick="switchCustTab('deliveries',this)">🚚 التوصيل</button>
+  </div>
+
+  <!-- Customers Tab -->
+  <div id="cust-tab-customers">
+    <div class="search-box">
+      <span class="search-icon">🔍</span>
+      <input type="text" placeholder="ابحث عن زبون..." oninput="searchCustomers(this.value)">
+    </div>
+    <div class="data-table-wrap">
+      <table class="data-table">
+        <thead><tr>
+          <th>الاسم</th><th>الهاتف</th><th>الدين</th><th>تاريخ الدين</th><th>إجراءات</th>
+        </tr></thead>
+        <tbody id="customers-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Deliveries Tab -->
+  <div id="cust-tab-deliveries" style="display:none">
+    <div class="data-table-wrap">
+      <table class="data-table">
+        <thead><tr>
+          <th>رقم الفاتورة</th><th>الزبون</th><th>الشركة</th><th>المبلغ</th><th>الحالة</th><th>إجراءات</th>
+        </tr></thead>
+        <tbody id="deliveries-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<!-- Add Customer Modal -->
+<div class="modal-overlay" id="add-cust-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>➕ إضافة زبون جديد</h3>
+      <button class="modal-close" onclick="closeM('add-cust-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group"><label>الاسم *</label><input type="text" id="new-cust-name" placeholder="اسم الزبون"></div>
+      <div class="form-group"><label>الهاتف *</label><input type="tel" id="new-cust-phone" placeholder="0xxxxxxxx"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeM('add-cust-modal')">إلغاء</button>
+      <button class="btn btn-primary" onclick="saveNewCustomer()">💾 حفظ</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const DB = window.parent.DB;
+const getState = () => window.parent.State;
+const showToast = (msg, type, dur) => window.parent.showToast(msg, type, dur);
+
+window.addEventListener('load', () => {
+  renderCustomersTable();
+  renderDeliveriesTable();
+});
+
+function closeM(id) { document.getElementById(id).classList.remove('open'); }
+function showAddCustomerModal() { document.getElementById('add-cust-modal').classList.add('open'); }
+
+function switchCustTab(tab, btn) {
+  document.querySelectorAll('.tabs .tab-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('cust-tab-customers').style.display = tab === 'customers' ? 'block' : 'none';
+  document.getElementById('cust-tab-deliveries').style.display = tab === 'deliveries' ? 'block' : 'none';
+}
+
+function saveNewCustomer() {
+  const State = getState();
+  const name = document.getElementById('new-cust-name').value.trim();
+  const phone = document.getElementById('new-cust-phone').value.trim();
+  if (!name || !phone) { showToast('⚠️ الاسم والهاتف مطلوبان', 'error'); return; }
+  State.customers.push({ id: Date.now(), name, phone, debt: 0, debtDate: null });
+  DB.set('customers', State.customers);
+  closeM('add-cust-modal');
+  document.getElementById('new-cust-name').value = '';
+  document.getElementById('new-cust-phone').value = '';
+  renderCustomersTable();
+  showToast(`✅ تم إضافة: ${name}`, 'success');
+}
+
+function renderCustomersTable(filter = '') {
+  const State = getState();
+  if (!State) return;
+  const tbody = document.getElementById('customers-tbody');
+  if (!tbody) return;
+  const list = filter
+    ? State.customers.filter(c => c.name.includes(filter) || c.phone.includes(filter))
+    : State.customers;
+  tbody.innerHTML = list.length ? list.map(c => `
+    <tr>
+      <td><strong>${c.name}</strong></td>
+      <td>${c.phone}</td>
+      <td><span class="badge ${c.debt > 0 ? 'badge-danger' : 'badge-success'}">${(c.debt||0).toFixed(2)} ${State.settings.currency}</span></td>
+      <td>${c.debtDate ? new Date(c.debtDate).toLocaleDateString('ar-DZ') : '-'}</td>
+      <td>
+        ${c.debt > 0 ? `
+          <button class="btn btn-sm btn-success" onclick="payDebt(${c.id})">✅ تسديد</button>
+          <button class="btn btn-sm btn-warning" onclick="partialPayDebt(${c.id})">💰 جزئي</button>
+        ` : ''}
+        <button class="btn btn-sm btn-danger" onclick="deleteCustomer(${c.id})">🗑</button>
+      </td>
+    </tr>
+  `).join('') : '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-muted)">لا يوجد زبائن</td></tr>';
+}
+
+function searchCustomers(val) { renderCustomersTable(val); }
+
+function payDebt(custId) {
+  const State = getState();
+  const c = State.customers.find(x => x.id === custId);
+  if (!c) return;
+  const sale = { id: Date.now(), invoiceNum: '#DEBT', type: 'debt_payment', customerName: c.name, total: c.debt, date: new Date().toISOString() };
+  State.sales.push(sale); State.todaySales.push(sale);
+  DB.set('sales', State.sales); DB.set('today_sales', State.todaySales);
+  c.debt = 0; c.debtDate = null;
+  DB.set('customers', State.customers);
+  renderCustomersTable();
+  showToast(`✅ تم تسديد دين: ${c.name}`, 'success');
+}
+
+function partialPayDebt(custId) {
+  const State = getState();
+  const c = State.customers.find(x => x.id === custId);
+  if (!c) return;
+  const amount = parseFloat(prompt(`تسديد جزئي لـ ${c.name}\nالدين الحالي: ${c.debt}\nأدخل المبلغ:`));
+  if (!amount || amount <= 0) return;
+  const paid = Math.min(amount, c.debt);
+  c.debt -= paid;
+  const sale = { id: Date.now(), invoiceNum: '#PARTIAL', type: 'partial_payment', customerName: c.name, total: paid, date: new Date().toISOString() };
+  State.sales.push(sale); State.todaySales.push(sale);
+  DB.set('sales', State.sales); DB.set('today_sales', State.todaySales);
+  DB.set('customers', State.customers);
+  renderCustomersTable();
+  showToast(`✅ تم تسديد ${paid} ${State.settings.currency}`, 'success');
+}
+
+function deleteCustomer(custId) {
+  if (!confirm('حذف هذا الزبون؟')) return;
+  const State = getState();
+  State.customers = State.customers.filter(c => c.id !== custId);
+  DB.set('customers', State.customers);
+  renderCustomersTable();
+  showToast('🗑 تم حذف الزبون', 'info');
+}
+
+function renderDeliveriesTable() {
+  const State = getState();
+  if (!State) return;
+  const tbody = document.getElementById('deliveries-tbody');
+  if (!tbody) return;
+  const companies = { world_express:'World Express',yalidine:'Yalidine',dhd:'DHD Livraison',kazi:'Kazi Tour',zr:'ZR Express' };
+  tbody.innerHTML = State.deliveries.length ? State.deliveries.map(d => `
+    <tr>
+      <td>${d.invoiceNum}</td>
+      <td>${d.customerName}</td>
+      <td>${companies[d.company] || d.company || '-'}</td>
+      <td>${d.total} ${State.settings.currency}</td>
+      <td><span class="badge ${d.status==='paid'?'badge-success':'badge-warning'}">${d.status==='paid'?'مسدد':'قيد التوصيل'}</span></td>
+      <td>
+        ${d.status !== 'paid' ? `<button class="btn btn-sm btn-success" onclick="payDelivery('${d.id}')">✅ تسديد</button>` : ''}
+        <button class="btn btn-sm btn-danger" onclick="deleteDelivery('${d.id}')">🗑</button>
+      </td>
+    </tr>
+  `).join('') : '<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text-muted)">لا توجد توصيلات</td></tr>';
+}
+
+function payDelivery(id) {
+  const State = getState();
+  const d = State.deliveries.find(x => x.id == id);
+  if (!d) return;
+  d.status = 'paid';
+  const sale = { id: Date.now(), invoiceNum: d.invoiceNum, type: 'delivery_paid', total: d.total, date: new Date().toISOString() };
+  State.sales.push(sale); State.todaySales.push(sale);
+  DB.set('sales', State.sales); DB.set('today_sales', State.todaySales);
+  DB.set('deliveries', State.deliveries);
+  renderDeliveriesTable();
+  showToast('✅ تم تسديد التوصيل', 'success');
+}
+
+function deleteDelivery(id) {
+  if (!confirm('حذف هذا التوصيل؟')) return;
+  const State = getState();
+  State.deliveries = State.deliveries.filter(d => d.id != id);
+  DB.set('deliveries', State.deliveries);
+  renderDeliveriesTable();
+}
+</script>
+</body>
+</html>
