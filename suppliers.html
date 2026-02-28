@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <title>الديون الخارجية</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body style="margin:0;background:var(--bg);height:100vh;overflow:hidden;display:flex;flex-direction:column">
+
+<div class="page-body" style="flex:1;overflow-y:auto;padding:16px 20px">
+
+  <div class="cards-row" id="ext-stats"></div>
+
+  <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
+    <button class="btn btn-primary btn-sm" onclick="showAddExtDebtModal()">➕ دين جديد</button>
+  </div>
+
+  <div class="data-table-wrap">
+    <table class="data-table">
+      <thead><tr>
+        <th>الاسم</th><th>الهاتف</th><th>قيمة الدين</th><th>المدفوع</th><th>المتبقي</th><th>إجراءات</th>
+      </tr></thead>
+      <tbody id="ext-debts-tbody"></tbody>
+    </table>
+  </div>
+
+</div>
+
+<!-- Add External Debt Modal -->
+<div class="modal-overlay" id="add-ext-debt-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>➕ دين خارجي جديد</h3>
+      <button class="modal-close" onclick="closeM('add-ext-debt-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group"><label>الاسم *</label><input id="ed-name" type="text" placeholder="اسم المورد أو الشخص"></div>
+      <div class="form-group"><label>الهاتف *</label><input id="ed-phone" type="tel" placeholder="0xxxxxxxx"></div>
+      <div class="form-group"><label>قيمة الدين *</label><input id="ed-amount" type="number" min="0" placeholder="0"></div>
+      <div class="form-group"><label>ملاحظة</label><textarea id="ed-note" rows="2" placeholder="وصف الدين..."></textarea></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeM('add-ext-debt-modal')">إلغاء</button>
+      <button class="btn btn-primary" onclick="saveExtDebt()">💾 حفظ</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const DB = window.parent.DB;
+const getState = () => window.parent.State;
+const showToast = (msg, type, dur) => window.parent.showToast(msg, type, dur);
+
+window.addEventListener('load', () => {
+  renderExtStats();
+  renderExtDebtsTable();
+});
+
+function closeM(id) { document.getElementById(id).classList.remove('open'); }
+function showAddExtDebtModal() { document.getElementById('add-ext-debt-modal').classList.add('open'); }
+
+function renderExtStats() {
+  const State = getState();
+  if (!State) return;
+  const total = State.externalDebts.reduce((s,d) => s + (d.remaining||0), 0);
+  document.getElementById('ext-stats').innerHTML = `
+    <div class="stat-card">
+      <div class="sc-accent" style="background:var(--danger)"></div>
+      <div class="sc-icon">💸</div>
+      <div class="sc-value">${total.toFixed(2)} ${State.settings.currency}</div>
+      <div class="sc-label">إجمالي الديون الخارجية</div>
+    </div>
+    <div class="stat-card">
+      <div class="sc-accent" style="background:var(--warning)"></div>
+      <div class="sc-icon">📋</div>
+      <div class="sc-value">${State.externalDebts.filter(d => (d.remaining||0) > 0).length}</div>
+      <div class="sc-label">عدد الديون النشطة</div>
+    </div>
+  `;
+}
+
+function renderExtDebtsTable() {
+  const State = getState();
+  if (!State) return;
+  const tbody = document.getElementById('ext-debts-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = State.externalDebts.length ? State.externalDebts.map(d => `
+    <tr>
+      <td><strong>${d.name}</strong>${d.note ? `<br><small style="color:var(--text-muted)">${d.note}</small>` : ''}</td>
+      <td>${d.phone}</td>
+      <td>${d.amount.toFixed(2)} ${State.settings.currency}</td>
+      <td>${(d.paid||0).toFixed(2)} ${State.settings.currency}</td>
+      <td><span class="badge ${(d.remaining||0)<=0?'badge-success':'badge-danger'}">${(d.remaining||d.amount).toFixed(2)} ${State.settings.currency}</span></td>
+      <td>
+        ${(d.remaining||d.amount) > 0 ? `<button class="btn btn-sm btn-warning" onclick="partialExtPay('${d.id}')">💰 تسديد</button>` : '<span style="color:var(--success)">✅ مسدد</span>'}
+        <button class="btn btn-sm btn-danger" onclick="deleteExtDebt('${d.id}')">🗑</button>
+      </td>
+    </tr>
+  `).join('') : '<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text-muted)">لا توجد ديون خارجية</td></tr>';
+}
+
+function saveExtDebt() {
+  const State = getState();
+  const name = document.getElementById('ed-name').value.trim();
+  const phone = document.getElementById('ed-phone').value.trim();
+  const amount = parseFloat(document.getElementById('ed-amount').value) || 0;
+  const note = document.getElementById('ed-note').value;
+  if (!name || !phone || !amount) { showToast('⚠️ الحقول المطلوبة غير مكتملة', 'error'); return; }
+  State.externalDebts.push({ id: Date.now().toString(), name, phone, amount, paid: 0, remaining: amount, note, date: new Date().toISOString() });
+  DB.set('external_debts', State.externalDebts);
+  closeM('add-ext-debt-modal');
+  document.getElementById('ed-name').value = '';
+  document.getElementById('ed-phone').value = '';
+  document.getElementById('ed-amount').value = '';
+  document.getElementById('ed-note').value = '';
+  renderExtStats();
+  renderExtDebtsTable();
+  showToast(`✅ تم إضافة دين: ${name}`, 'success');
+}
+
+function partialExtPay(id) {
+  const State = getState();
+  const d = State.externalDebts.find(x => x.id === id);
+  if (!d) return;
+  const amount = parseFloat(prompt(`تسديد - المتبقي: ${(d.remaining||d.amount).toFixed(2)}\nأدخل المبلغ:`));
+  if (!amount || amount <= 0) return;
+  d.paid = (d.paid || 0) + Math.min(amount, d.remaining || d.amount);
+  d.remaining = d.amount - d.paid;
+  DB.set('external_debts', State.externalDebts);
+  renderExtStats();
+  renderExtDebtsTable();
+  showToast('✅ تم تسجيل التسديد', 'success');
+}
+
+function deleteExtDebt(id) {
+  if (!confirm('حذف هذا الدين؟')) return;
+  const State = getState();
+  State.externalDebts = State.externalDebts.filter(d => d.id !== id);
+  DB.set('external_debts', State.externalDebts);
+  renderExtStats();
+  renderExtDebtsTable();
+}
+</script>
+</body>
+</html>
