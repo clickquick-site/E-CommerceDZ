@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <title>إدارة الأعمال</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body style="margin:0;background:var(--bg);height:100vh;overflow:hidden;display:flex;flex-direction:column">
+
+<div class="page-body" style="flex:1;overflow-y:auto;padding:16px 20px" id="reports-root">
+
+  <!-- Stats Cards -->
+  <div class="cards-row" id="stats-cards"></div>
+
+  <!-- Period Tabs -->
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchReportTab('today',this)">اليوم</button>
+    <button class="tab-btn" onclick="switchReportTab('week',this)">الأسبوع</button>
+    <button class="tab-btn" onclick="switchReportTab('month',this)">الشهر</button>
+    <button class="tab-btn" onclick="switchReportTab('year',this)">السنة</button>
+    <button class="tab-btn" onclick="switchReportTab('products',this)">تقارير المنتجات</button>
+  </div>
+
+  <div id="report-content"></div>
+
+  <!-- Day Close -->
+  <div style="margin-top:20px;padding:16px;background:var(--bg-card);border-radius:var(--radius);border:1px solid var(--border)">
+    <h3 style="margin-bottom:12px;font-size:1rem">🔒 إقفال اليوم</h3>
+    <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:12px">
+      إقفال اليوم يمسح مصاريف اليوم مع إبقائها في السجل العام. يبدأ العد من #001
+    </p>
+    <button class="btn btn-danger" onclick="closeDayConfirm()">🔒 إقفال اليوم</button>
+  </div>
+
+</div>
+
+<script>
+const DB = window.parent.DB;
+const getState = () => window.parent.State;
+const showToast = (msg, type, dur) => window.parent.showToast(msg, type, dur);
+
+window.addEventListener('load', () => {
+  renderStatsCards();
+  renderTodayReport();
+});
+
+function renderStatsCards() {
+  const State = getState();
+  if (!State) return;
+  const todaySales = State.todaySales.filter(s => s.type !== 'debt');
+  const totalRevenue = todaySales.reduce((s,i) => s + (i.total||0), 0);
+  const totalProfit = todaySales.reduce((s,i) => s + (i.profit||0), 0);
+  const totalItems = todaySales.reduce((s,i) => s + (i.items?.reduce((a,b)=>a+b.qty,0)||0), 0);
+  const totalDebt = State.customers.reduce((s,c) => s + (c.debt||0), 0);
+  const pendingDeliveries = State.deliveries.filter(d => d.status !== 'paid').length;
+  const pendingDeliveryAmt = State.deliveries.filter(d => d.status !== 'paid').reduce((s,d) => s + d.total, 0);
+
+  document.getElementById('stats-cards').innerHTML = `
+    <div class="stat-card"><div class="sc-accent"></div><div class="sc-icon">💰</div>
+      <div class="sc-value">${totalRevenue.toFixed(2)} ${State.settings.currency}</div><div class="sc-label">المدخول اليومي</div></div>
+    <div class="stat-card"><div class="sc-accent" style="background:var(--success)"></div><div class="sc-icon">📈</div>
+      <div class="sc-value">${totalProfit.toFixed(2)} ${State.settings.currency}</div><div class="sc-label">الفائدة اليومية</div></div>
+    <div class="stat-card"><div class="sc-accent" style="background:var(--warning)"></div><div class="sc-icon">🛒</div>
+      <div class="sc-value">${totalItems}</div><div class="sc-label">عدد المنتجات المباعة</div></div>
+    <div class="stat-card"><div class="sc-accent" style="background:var(--danger)"></div><div class="sc-icon">📋</div>
+      <div class="sc-value">${totalDebt.toFixed(2)} ${State.settings.currency}</div>
+      <div class="sc-label">إجمالي الديون (${State.customers.filter(c=>c.debt>0).length} زبون)</div></div>
+    <div class="stat-card"><div class="sc-accent" style="background:var(--accent)"></div><div class="sc-icon">🚚</div>
+      <div class="sc-value">${pendingDeliveryAmt.toFixed(2)} ${State.settings.currency}</div>
+      <div class="sc-label">التوصيل قيد الانتظار (${pendingDeliveries})</div></div>
+  `;
+}
+
+function switchReportTab(tab, btn) {
+  document.querySelectorAll('.tabs .tab-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  switch(tab) {
+    case 'today':    renderTodayReport(); break;
+    case 'week':     renderPeriodReport(7); break;
+    case 'month':    renderPeriodReport(30); break;
+    case 'year':     renderYearReport(); break;
+    case 'products': renderProductsReport(); break;
+  }
+}
+
+function translateType(type) {
+  const types = { cash:'نقداً', delivery:'توصيل', debt:'دين', debt_payment:'تسديد دين', partial_payment:'تسديد جزئي', delivery_paid:'توصيل مسدد' };
+  return types[type] || type;
+}
+
+function renderTodayReport() {
+  const State = getState();
+  if (!State) return;
+  const today = new Date().toDateString();
+  const sales = State.sales.filter(s => new Date(s.date).toDateString() === today);
+  document.getElementById('report-content').innerHTML = `
+    <div class="data-table-wrap">
+      <table class="data-table">
+        <thead><tr>
+          <th>الفاتورة</th><th>النوع</th><th>المنتجات</th><th>سعر الشراء</th><th>سعر البيع</th><th>الفائدة</th><th>التوقيت</th><th>إلغاء</th>
+        </tr></thead>
+        <tbody>
+          ${sales.length ? sales.map(s => `
+            <tr>
+              <td>${s.invoiceNum}</td>
+              <td>${translateType(s.type)}</td>
+              <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.items ? s.items.map(i=>i.name).join(', ') : '-'}</td>
+              <td>${(s.buyTotal||0).toFixed(2)} ${State.settings.currency}</td>
+              <td>${(s.total||0).toFixed(2)} ${State.settings.currency}</td>
+              <td>${(s.profit||0).toFixed(2)} ${State.settings.currency}</td>
+              <td>${new Date(s.date).toLocaleTimeString('ar-DZ')}</td>
+              <td>
+                ${new Date(s.date).toDateString() === today && s.type !== 'debt_payment' ?
+                  `<button class="btn btn-sm btn-danger" onclick="cancelSale('${s.id}')">❌</button>` : '-'}
+              </td>
+            </tr>
+          `).join('') : '<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--text-muted)">لا توجد مبيعات اليوم</td></tr>'}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderPeriodReport(days) {
+  const State = getState();
+  if (!State) return;
+  const from = new Date(Date.now() - days * 86400000);
+  const sales = State.sales.filter(s => new Date(s.date) >= from && s.type === 'cash');
+  const rev = sales.reduce((s,i) => s + i.total, 0);
+  const prof = sales.reduce((s,i) => s + (i.profit||0), 0);
+  document.getElementById('report-content').innerHTML = `
+    <div class="cards-row">
+      <div class="stat-card"><div class="sc-accent"></div><div class="sc-value">${rev.toFixed(2)} ${State.settings.currency}</div><div class="sc-label">إجمالي المبيعات</div></div>
+      <div class="stat-card"><div class="sc-accent" style="background:var(--success)"></div><div class="sc-value">${prof.toFixed(2)} ${State.settings.currency}</div><div class="sc-label">إجمالي الفائدة</div></div>
+    </div>
+    <div class="data-table-wrap">
+      <table class="data-table">
+        <thead><tr><th>الفاتورة</th><th>المبيعات</th><th>الفائدة</th><th>التاريخ</th></tr></thead>
+        <tbody>${sales.map(s=>`<tr><td>${s.invoiceNum}</td><td>${s.total}</td><td>${(s.profit||0).toFixed(2)}</td><td>${new Date(s.date).toLocaleDateString('ar-DZ')}</td></tr>`).join('') || '<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--text-muted)">لا توجد بيانات</td></tr>'}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderYearReport() {
+  const State = getState();
+  if (!State) return;
+  const months = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
+  const year = new Date().getFullYear();
+  const byMonth = months.map((m, i) => {
+    const ms = State.sales.filter(s => {
+      const d = new Date(s.date); return d.getFullYear() === year && d.getMonth() === i && s.type === 'cash';
+    });
+    return { month: m, rev: ms.reduce((s,x)=>s+x.total,0), prof: ms.reduce((s,x)=>s+(x.profit||0),0), count: ms.length };
+  });
+  document.getElementById('report-content').innerHTML = `
+    <div class="data-table-wrap">
+      <table class="data-table">
+        <thead><tr><th>الشهر</th><th>عدد المبيعات</th><th>إجمالي المبيعات</th><th>الفائدة</th></tr></thead>
+        <tbody>${byMonth.map(m=>`<tr><td>${m.month}</td><td>${m.count}</td><td>${m.rev.toFixed(2)} ${State.settings.currency}</td><td>${m.prof.toFixed(2)} ${State.settings.currency}</td></tr>`).join('')}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderProductsReport() {
+  const State = getState();
+  if (!State) return;
+  const salesItems = State.sales.flatMap(s => s.items || []);
+  const grouped = {};
+  salesItems.forEach(i => {
+    if (!grouped[i.name]) grouped[i.name] = { name: i.name, qty: 0, revenue: 0 };
+    grouped[i.name].qty += i.qty;
+    grouped[i.name].revenue += i.total;
+  });
+  const sorted = Object.values(grouped).sort((a,b) => b.qty - a.qty);
+  const lowStock = State.products.filter(p => p.qty <= 5);
+  document.getElementById('report-content').innerHTML = `
+    <h4 style="margin-bottom:10px">🏆 الأكثر مبيعاً</h4>
+    <div class="data-table-wrap" style="margin-bottom:16px">
+      <table class="data-table">
+        <thead><tr><th>#</th><th>المنتج</th><th>الكمية المباعة</th><th>الإيرادات</th></tr></thead>
+        <tbody>${sorted.slice(0,10).map((p,i)=>`<tr><td>${i+1}</td><td>${p.name}</td><td>${p.qty}</td><td>${p.revenue.toFixed(2)} ${State.settings.currency}</td></tr>`).join('') || '<tr><td colspan="4" style="text-align:center;padding:20px">لا توجد بيانات</td></tr>'}</tbody>
+      </table>
+    </div>
+    <h4 style="margin-bottom:10px">⚠️ المخزون المنخفض</h4>
+    <div class="data-table-wrap">
+      <table class="data-table">
+        <thead><tr><th>المنتج</th><th>الكمية المتبقية</th><th>الحالة</th></tr></thead>
+        <tbody>${lowStock.map(p=>`<tr><td>${p.name}</td><td>${p.qty}</td><td><span class="badge ${p.qty<=0?'badge-danger':'badge-warning'}">${p.qty<=0?'نفد':'منخفض'}</span></td></tr>`).join('') || '<tr><td colspan="3" style="text-align:center;padding:20px">المخزون جيد ✅</td></tr>'}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+function cancelSale(saleId) {
+  if (!confirm('إلغاء هذا البيع؟ سيتم إعادة الكمية للمخزن.')) return;
+  const State = getState();
+  const idx = State.sales.findIndex(s => s.id == saleId);
+  if (idx === -1) return;
+  const sale = State.sales[idx];
+  (sale.items || []).forEach(item => {
+    const p = State.products.find(x => x.id === item.id);
+    if (p) p.qty += item.qty;
+  });
+  DB.set('products', State.products);
+  State.sales.splice(idx, 1);
+  DB.set('sales', State.sales);
+  State.todaySales = State.todaySales.filter(s => s.id != saleId);
+  DB.set('today_sales', State.todaySales);
+  showToast('✅ تم إلغاء البيع', 'info');
+  renderStatsCards();
+  renderTodayReport();
+}
+
+function closeDayConfirm() {
+  if (!confirm('تأكيد إقفال اليوم؟ سيتم مسح مصاريف اليوم وإعادة تعداد الفواتير من #001.')) return;
+  const State = getState();
+  State.todaySales = [];
+  DB.set('today_sales', []);
+  State.invoiceCounter = 1;
+  DB.set('invoice_counter', 1);
+  renderStatsCards();
+  renderTodayReport();
+  showToast('✅ تم إقفال اليوم بنجاح', 'success');
+}
+</script>
+</body>
+</html>
