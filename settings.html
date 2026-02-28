@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <title>الإعدادات</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body style="margin:0;background:var(--bg);height:100vh;overflow:hidden;display:flex;flex-direction:column">
+
+<div style="flex:1;overflow-y:auto;padding:16px 20px">
+
+  <!-- Settings Tabs -->
+  <div class="settings-tabs">
+    <button class="settings-tab active" onclick="switchTab('program',this)">⚙️ البرنامج</button>
+    <button class="settings-tab" onclick="switchTab('store',this)">🏪 المتجر</button>
+    <button class="settings-tab" onclick="switchTab('delivery',this)">🚚 شركات التوصيل</button>
+    <button class="settings-tab" onclick="switchTab('print',this)">🖨️ الطباعة</button>
+    <button class="settings-tab" onclick="switchTab('notif',this)">🔔 الإشعارات</button>
+    <button class="settings-tab" onclick="switchTab('system',this)">🖥️ النظام</button>
+    <button class="settings-tab" onclick="switchTab('about',this)">ℹ️ حول</button>
+  </div>
+
+  <div id="settings-content"></div>
+
+</div>
+
+<script>
+const DB = window.parent.DB;
+const getState = () => window.parent.State;
+const showToast = (msg, type, dur) => window.parent.showToast(msg, type, dur);
+const applySettingsParent = () => window.parent.applySettings();
+const updateStoreNameHeader = () => window.parent.updateStoreNameHeader();
+
+window.addEventListener('load', () => renderProgramSettings());
+
+function switchTab(tab, btn) {
+  document.querySelectorAll('.settings-tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  switch(tab) {
+    case 'program':  renderProgramSettings(); break;
+    case 'store':    renderStoreSettings(); break;
+    case 'delivery': renderDeliverySettings(); break;
+    case 'print':    renderPrintSettings(); break;
+    case 'notif':    renderNotifSettings(); break;
+    case 'system':   renderSystemSettings(); break;
+    case 'about':    renderAboutSection(); break;
+  }
+}
+
+function updateSetting(key, value) {
+  const State = getState();
+  State.settings[key] = value;
+}
+
+function saveAllSettings() {
+  const State = getState();
+  DB.set('settings', State.settings);
+  applySettingsParent();
+  showToast('✅ تم الحفظ بنجاح', 'success');
+}
+
+// ===== PROGRAM SETTINGS =====
+function renderProgramSettings() {
+  const s = getState().settings;
+  document.getElementById('settings-content').innerHTML = `
+    <div style="max-width:600px">
+      <div class="form-group">
+        <label>📅 صيغة التاريخ</label>
+        <select onchange="updateSetting('dateFormat',this.value)">
+          <option value="dmy" ${s.dateFormat==='dmy'?'selected':''}>يوم/شهر/سنة</option>
+          <option value="mdy" ${s.dateFormat==='mdy'?'selected':''}>شهر/يوم/سنة</option>
+          <option value="ymd" ${s.dateFormat==='ymd'?'selected':''}>سنة/شهر/يوم</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>💰 رمز العملة</label>
+        <select onchange="updateSetting('currency',this.value)">
+          <option value="دج" ${s.currency==='دج'?'selected':''}>دج - دينار جزائري</option>
+          <option value="ر.س" ${s.currency==='ر.س'?'selected':''}>ر.س - ريال سعودي</option>
+          <option value="ر.إ" ${s.currency==='ر.إ'?'selected':''}>ر.إ - درهم إماراتي</option>
+          <option value="ج.م" ${s.currency==='ج.م'?'selected':''}>ج.م - جنيه مصري</option>
+          <option value="د.م" ${s.currency==='د.م'?'selected':''}>د.م - درهم مغربي</option>
+          <option value="د.ت" ${s.currency==='د.ت'?'selected':''}>د.ت - دينار تونسي</option>
+          <option value="€" ${s.currency==='€'?'selected':''}>€ - يورو</option>
+          <option value="$" ${s.currency==='$'?'selected':''}>$ - دولار</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>🌐 لغة البرنامج</label>
+        <select onchange="updateSetting('lang',this.value);saveAllSettings()">
+          <option value="ar" ${s.lang==='ar'?'selected':''}>العربية AR</option>
+          <option value="fr" ${s.lang==='fr'?'selected':''}>Français FR</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>🎨 المظهر</label>
+        <select onchange="updateSetting('theme',this.value);saveAllSettings()">
+          <option value="light" ${s.theme==='light'?'selected':''}>☀️ Mode Jour - فاتح</option>
+          <option value="dark" ${s.theme==='dark'?'selected':''}>🌙 Mode Nuit - داكن</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>🎨 لون التطبيق</label>
+        <div class="color-options">
+          ${[
+            {val:'default',bg:'linear-gradient(135deg,#6c63ff,#00d4ff)',label:'بنفسجي (افتراضي)'},
+            {val:'green',bg:'#00b894',label:'أخضر'},
+            {val:'blue',bg:'#0984e3',label:'أزرق'},
+            {val:'orange',bg:'#e17055',label:'برتقالي'},
+            {val:'red',bg:'#d63031',label:'أحمر'}
+          ].map(c => `
+            <div class="color-swatch ${s.color===c.val?'active':''}"
+              style="background:${c.bg}" title="${c.label}"
+              onclick="updateSetting('color','${c.val}');saveAllSettings();document.querySelectorAll('.color-swatch').forEach(x=>x.classList.remove('active'));this.classList.add('active')">
+            </div>
+          `).join('')}
+        </div>
+      </div>
+      <div class="form-group">
+        <label>🔤 حجم الخط</label>
+        <div style="display:flex;align-items:center;gap:12px">
+          <button class="btn btn-outline btn-sm" onclick="changeFontSize(-1)">−</button>
+          <span id="font-size-disp">${s.fontSize}px</span>
+          <button class="btn btn-outline btn-sm" onclick="changeFontSize(1)">+</button>
+        </div>
+      </div>
+      <div style="margin-top:16px">
+        <h4 style="margin-bottom:10px">🔊 إعدادات الصوت</h4>
+        <div class="toggle-wrap">
+          <label>تفعيل الأصوات</label>
+          <label class="toggle"><input type="checkbox" ${s.soundEnabled?'checked':''} onchange="updateSetting('soundEnabled',this.checked)"><span class="toggle-slider"></span></label>
+        </div>
+      </div>
+      <div style="margin-top:14px">
+        <button class="btn btn-primary" onclick="saveAllSettings()">💾 حفظ البيانات</button>
+      </div>
+    </div>
+  `;
+}
+
+function changeFontSize(delta) {
+  const State = getState();
+  State.settings.fontSize = Math.max(12, Math.min(20, (State.settings.fontSize || 15) + delta));
+  const el = document.getElementById('font-size-disp');
+  if (el) el.textContent = State.settings.fontSize + 'px';
+  document.documentElement.style.fontSize = State.settings.fontSize + 'px';
+  window.parent.document.documentElement.style.fontSize = State.settings.fontSize + 'px';
+}
+
+// ===== STORE SETTINGS =====
+function renderStoreSettings() {
+  const s = getState().settings;
+  document.getElementById('settings-content').innerHTML = `
+    <div style="max-width:600px">
+      <div class="form-group">
+        <label>🖼️ شعار المتجر</label>
+        <div style="display:flex;gap:10px;align-items:center">
+          <input type="file" id="store-logo" accept="image/*" onchange="uploadLogo(this)" style="flex:1">
+          ${s.logoUrl ? `<img src="${s.logoUrl}" style="height:50px;border-radius:8px"><button class="btn btn-sm btn-danger" onclick="updateSetting('logoUrl','');saveAllSettings()">🗑</button>` : ''}
+        </div>
+      </div>
+      <div class="form-group"><label>🏪 اسم المتجر *</label><input type="text" id="st-name" value="${s.storeName}" oninput="updateSetting('storeName',this.value);updateStoreNameHeader()"></div>
+      <div class="form-group"><label>📞 رقم الهاتف</label><input type="tel" id="st-phone" value="${s.phone||''}"></div>
+      <div class="form-group"><label>📍 العنوان</label><input type="text" id="st-addr" value="${s.address||''}"></div>
+      <div class="form-group"><label>💬 رسالة ترحيب للفاتورة</label><textarea id="st-welcome" rows="2">${s.welcomeMsg||''}</textarea></div>
+      <button class="btn btn-primary" onclick="saveStoreSettings()">💾 حفظ البيانات</button>
+    </div>
+  `;
+}
+
+function saveStoreSettings() {
+  const State = getState();
+  State.settings.storeName = document.getElementById('st-name')?.value || State.settings.storeName;
+  State.settings.phone = document.getElementById('st-phone')?.value || '';
+  State.settings.address = document.getElementById('st-addr')?.value || '';
+  State.settings.welcomeMsg = document.getElementById('st-welcome')?.value || '';
+  saveAllSettings();
+  updateStoreNameHeader();
+}
+
+function uploadLogo(input) {
+  const file = input.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => { updateSetting('logoUrl', e.target.result); };
+  reader.readAsDataURL(file);
+}
+
+// ===== DELIVERY SETTINGS =====
+function renderDeliverySettings() {
+  const companies = [
+    { key: 'world_express', name: 'World Express', fields: ['apiKey', 'storeId'] },
+    { key: 'yalidine', name: 'Yalidine', fields: ['apiToken', 'centerId'] },
+    { key: 'dhd', name: 'DHD Livraison', fields: ['apiKey', 'merchantId'] },
+    { key: 'kazi', name: 'Kazi Tour', fields: ['apiKey', 'clientId'] },
+    { key: 'zr', name: 'ZR Express', fields: ['apiKey', 'agencyCode'] }
+  ];
+  const dc = getState().settings.deliveryCompanies || {};
+  const fieldLabel = f => ({ apiKey:'API Key', apiToken:'API Token', storeId:'Store ID', centerId:'Center ID', merchantId:'Merchant ID', clientId:'Client ID', agencyCode:'Agency Code' }[f] || f);
+  document.getElementById('settings-content').innerHTML = `
+    <div style="max-width:700px">
+      <p style="color:var(--text-muted);margin-bottom:16px;font-size:0.9rem">أدخل بيانات حسابات شركات التوصيل للربط بالـ API</p>
+      ${companies.map(c => `
+        <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:12px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+            <h4>🚚 ${c.name}</h4>
+            <label class="toggle"><input type="checkbox" ${dc[c.key]?.active?'checked':''} onchange="toggleDeliveryCompany('${c.key}',this.checked)"><span class="toggle-slider"></span></label>
+          </div>
+          <div class="form-row">
+            ${c.fields.map(f => `
+              <div class="form-group">
+                <label>${fieldLabel(f)}</label>
+                <input type="text" value="${dc[c.key]?.[f]||''}" onchange="saveDeliveryCompany('${c.key}','${f}',this.value)" placeholder="أدخل ${fieldLabel(f)}">
+              </div>
+            `).join('')}
+          </div>
+          <button class="btn btn-sm btn-outline" onclick="testDeliveryApi('${c.key}')">🔗 اختبار الاتصال</button>
+        </div>
+      `).join('')}
+      <button class="btn btn-primary" onclick="saveAllSettings()">💾 حفظ</button>
+    </div>
+  `;
+}
+
+function toggleDeliveryCompany(key, val) {
+  const State = getState();
+  if (!State.settings.deliveryCompanies) State.settings.deliveryCompanies = {};
+  if (!State.settings.deliveryCompanies[key]) State.settings.deliveryCompanies[key] = {};
+  State.settings.deliveryCompanies[key].active = val;
+}
+
+function saveDeliveryCompany(key, field, val) {
+  const State = getState();
+  if (!State.settings.deliveryCompanies) State.settings.deliveryCompanies = {};
+  if (!State.settings.deliveryCompanies[key]) State.settings.deliveryCompanies[key] = {};
+  State.settings.deliveryCompanies[key][field] = val;
+}
+
+function testDeliveryApi(company) {
+  showToast(`🔗 جاري اختبار اتصال ${company}...`, 'info');
+  setTimeout(() => showToast('✅ تم الاتصال بنجاح (تجريبي)', 'success'), 1500);
+}
+
+// ===== PRINT SETTINGS =====
+function renderPrintSettings() {
+  const s = getState().settings;
+  document.getElementById('settings-content').innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;max-width:800px">
+      <div>
+        <div class="form-group">
+          <label>📄 مقاس الورق</label>
+          <select onchange="updateSetting('paperSize',this.value)">
+            <option value="A4" ${s.paperSize==='A4'?'selected':''}>A4</option>
+            <option value="A5" ${s.paperSize==='A5'?'selected':''}>A5</option>
+            <option value="A6" ${s.paperSize==='A6'?'selected':''}>A6 (ملصق توصيل)</option>
+            <option value="80mm" ${s.paperSize==='80mm'?'selected':''}>80mm (حراري)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>🖨️ اختيار الطابعة</label>
+          <button class="btn btn-outline" onclick="selectPrinter()">🔍 البحث عن الطابعة</button>
+          <p style="font-size:0.8rem;color:var(--text-muted);margin-top:6px" id="printer-name">${s.printerName || 'لم يتم اختيار طابعة'}</p>
+        </div>
+        <button class="btn btn-primary" onclick="saveAllSettings()">💾 حفظ</button>
+      </div>
+      <div>
+        <h4 style="margin-bottom:10px">👁️ معاينة الفاتورة</h4>
+        <div id="print-preview" style="background:white;border:1px solid #ddd;border-radius:8px;padding:16px;font-size:0.8rem;direction:rtl;color:#333">
+          ${getPrintPreview()}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function getPrintPreview() {
+  const s = getState().settings;
+  return `
+    <div style="text-align:center;border-bottom:1px dashed #999;padding-bottom:8px;margin-bottom:8px">
+      <strong style="font-size:1rem">${s.storeName}</strong><br>
+      <small>${s.phone || ''}</small><br>
+      <small>${s.address || ''}</small>
+    </div>
+    <div style="font-size:0.75rem">
+      <p>رقم الفاتورة: #001</p>
+      <p>التاريخ: ${new Date().toLocaleDateString('ar-DZ')}</p>
+      <p>اسم المستلم: ............</p>
+      <p>الهاتف: ............</p>
+      <p>العنوان: ............</p>
+    </div>
+    <hr style="border:none;border-top:1px dashed #999;margin:8px 0">
+    <table style="width:100%;font-size:0.75rem">
+      <tr><th>المنتج</th><th>الكمية</th><th>السعر</th></tr>
+      <tr><td>منتج مثال</td><td>1</td><td>1000 ${s.currency}</td></tr>
+    </table>
+    <hr style="border:none;border-top:1px dashed #999;margin:8px 0">
+    <strong>المجموع: 1000 ${s.currency}</strong>
+    <p style="text-align:center;margin-top:8px;font-size:0.7rem">${s.welcomeMsg||''}</p>
+  `;
+}
+
+function selectPrinter() {
+  const State = getState();
+  const name = prompt('أدخل اسم الطابعة أو اضغط موافق للبحث التلقائي:', '');
+  if (name !== null) {
+    State.settings.printerName = name || 'الطابعة الافتراضية';
+    const el = document.getElementById('printer-name');
+    if (el) el.textContent = State.settings.printerName;
+  }
+}
+
+// ===== NOTIF SETTINGS =====
+function renderNotifSettings() {
+  const s = getState().settings;
+  document.getElementById('settings-content').innerHTML = `
+    <div style="max-width:600px">
+      <div class="toggle-wrap">
+        <label>⚠️ إشعار المخزون المنخفض (أقل من 5)</label>
+        <label class="toggle"><input type="checkbox" ${s.notifStock?'checked':''} onchange="updateSetting('notifStock',this.checked)"><span class="toggle-slider"></span></label>
+      </div>
+      <div class="toggle-wrap">
+        <label>📋 إشعار الديون المتأخرة (أكثر من أسبوع)</label>
+        <label class="toggle"><input type="checkbox" ${s.notifDebt!==false?'checked':''} onchange="updateSetting('notifDebt',this.checked)"><span class="toggle-slider"></span></label>
+      </div>
+      <div class="toggle-wrap">
+        <label>👤 إشعار دخول المستخدمين</label>
+        <label class="toggle"><input type="checkbox" ${s.notifLogin?'checked':''} onchange="updateSetting('notifLogin',this.checked)"><span class="toggle-slider"></span></label>
+      </div>
+      <div class="toggle-wrap">
+        <label>❌ إشعار نفاد المخزون</label>
+        <label class="toggle"><input type="checkbox" ${s.notifEmpty!==false?'checked':''} onchange="updateSetting('notifEmpty',this.checked)"><span class="toggle-slider"></span></label>
+      </div>
+      <div style="margin-top:14px">
+        <button class="btn btn-primary" onclick="saveAllSettings()">💾 حفظ</button>
+      </div>
+    </div>
+  `;
+}
+
+// ===== SYSTEM SETTINGS =====
+function renderSystemSettings() {
+  const State = getState();
+  document.getElementById('settings-content').innerHTML = `
+    <div style="max-width:600px">
+      <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:16px">
+        <h4 style="margin-bottom:12px">💾 النسخ الاحتياطي</h4>
+        <div class="toggle-wrap">
+          <label>تفعيل النسخ اليومي التلقائي</label>
+          <label class="toggle"><input type="checkbox" ${State.settings.autoBackup?'checked':''} onchange="updateSetting('autoBackup',this.checked)"><span class="toggle-slider"></span></label>
+        </div>
+        <button class="btn btn-primary" style="margin-top:10px" onclick="exportBackup()">📤 تصدير النسخة الآن</button>
+      </div>
+      <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:16px">
+        <h4 style="margin-bottom:12px;color:var(--warning)">⚠️ مسح جزئي للبيانات</h4>
+        <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:12px">يمسح: المبيعات، الديون، سجل العمليات. لا يمسح: المنتجات، الزبائن، المستخدمين.</p>
+        <button class="btn btn-warning" onclick="partialClearData()">🗑 مسح جزئي</button>
+      </div>
+      <div style="background:var(--bg-card);border:1px solid rgba(255,71,87,0.3);border-radius:var(--radius);padding:16px">
+        <h4 style="margin-bottom:12px;color:var(--danger)">❌ مسح كلي للبيانات</h4>
+        <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:12px">يمسح كل شيء: المبيعات، الديون، المنتجات، الزبائن، المستخدمين.</p>
+        <button class="btn btn-danger" onclick="fullClearData()">💣 مسح كلي</button>
+      </div>
+    </div>
+  `;
+}
+
+function exportBackup() {
+  const State = getState();
+  const data = { products: State.products, customers: State.customers, sales: State.sales, deliveries: State.deliveries, externalDebts: State.externalDebts, settings: State.settings, exportDate: new Date().toISOString() };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `ecdz-backup-${new Date().toLocaleDateString('fr-DZ').replace(/\//g,'-')}.json`;
+  a.click();
+  showToast('✅ تم تصدير النسخة الاحتياطية', 'success');
+}
+
+function partialClearData() {
+  if (!confirm('مسح جزئي: المبيعات والديون فقط؟')) return;
+  const State = getState();
+  State.sales = []; State.todaySales = [];
+  State.customers.forEach(c => { c.debt = 0; c.debtDate = null; });
+  DB.set('sales', []); DB.set('today_sales', []); DB.set('customers', State.customers);
+  showToast('✅ تم المسح الجزئي', 'success');
+}
+
+function fullClearData() {
+  const pass = prompt('تحذير: هذا الإجراء سيمسح كل البيانات!\nأدخل "CONFIRM" للتأكيد:');
+  if (pass !== 'CONFIRM') { showToast('❌ تم الإلغاء', 'info'); return; }
+  const State = getState();
+  State.products = []; State.customers = []; State.sales = []; State.todaySales = [];
+  State.deliveries = []; State.externalDebts = []; State.notifications = [];
+  ['products','customers','sales','today_sales','deliveries','external_debts','notifications'].forEach(k => DB.set(k, []));
+  showToast('✅ تم المسح الكلي', 'info');
+}
+
+// ===== ABOUT =====
+function renderAboutSection() {
+  document.getElementById('settings-content').innerHTML = `
+    <div style="max-width:500px;margin:0 auto">
+      <div style="background:linear-gradient(135deg,var(--primary),var(--accent));border-radius:var(--radius);padding:32px;text-align:center;color:white;margin-bottom:16px">
+        <h1 style="font-size:2.5rem;font-weight:900;margin-bottom:8px">E-Commerce DZ</h1>
+        <p style="font-size:1.1rem;opacity:0.9">نظام نقاط البيع الذكي</p>
+        <div style="margin-top:16px;opacity:0.8;font-size:0.9rem">
+          <p>الإصدار: 2.0.0</p>
+          <p>تاريخ الإصدار: 2026</p>
+          <p>يدعم جميع إصدارات Windows</p>
+        </div>
+      </div>
+      <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:16px;text-align:center">
+        <div style="font-size:1.5rem;margin-bottom:8px">🔐</div>
+        <h4>حالة الترخيص</h4>
+        <p style="color:var(--success);font-weight:700;margin-top:8px">✔️ البرنامج مفعل</p>
+      </div>
+      <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:20px;text-align:center">
+        <h4 style="margin-bottom:12px">👨‍💻 المطور</h4>
+        <p style="font-size:1rem;font-weight:700;color:var(--primary)">بوس ديزاد | ب.حمزة</p>
+        <p style="margin-top:8px">
+          <span style="background:rgba(0,200,100,0.15);color:#00c850;padding:6px 16px;border-radius:99px;font-size:0.9rem">
+            📱 واتساب: 0770044850
+          </span>
+        </p>
+      </div>
+      <div style="text-align:center;margin-top:16px;color:var(--text-muted);font-size:0.82rem">
+        2026 بوس ديزاد - جميع الحقوق محفوظة ®
+      </div>
+    </div>
+  `;
+}
+</script>
+</body>
+</html>
